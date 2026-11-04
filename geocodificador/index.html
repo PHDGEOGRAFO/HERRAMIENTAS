@@ -14,7 +14,7 @@ function csvText(rows){let keys=Object.keys(rows[0]||{}),escape=v=>'"'+String(v?
 const DATA_BASE='./datos/';
 const azimutSources=['https://julloa.space/azimut/callejero-segments-index.json','https://raw.githubusercontent.com/geoidegeoidal/azimut/main/public/callejero-segments-index.json'];
 let basePromise=null;
-async function getJson(url){const response=await fetch(url,{cache:'force-cache'});if(!response.ok)throw Error('HTTP '+response.status);return response.json()}
+async function getJson(url){const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),12000);try{const response=await fetch(url,{cache:'force-cache',signal:controller.signal});if(!response.ok)throw Error('HTTP '+response.status);return await response.json()}finally{clearTimeout(timeout)}}
 async function firstAvailable(urls){for(const url of urls){try{return await getJson(url)}catch(e){console.warn('Base no disponible',url,e)}}return null}
 async function baseData(){
  if(basePromise)return basePromise;

@@ -1,9 +1,51 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Geocodificador | Santiago</title><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script><style>*{box-sizing:border-box}body{margin:0;font:14px Arial,sans-serif;color:#20362a;background:#eaf1ed}header{padding:15px 22px;background:#192d27;color:white}header a{color:#b9e7d2}h1{font-size:22px;margin:7px 0}main{display:grid;grid-template-columns:360px 1fr}aside{padding:15px;overflow:auto;max-height:calc(100vh - 88px)}section{padding:13px;background:white;border:1px solid #d4e1d9;border-radius:10px;margin-bottom:12px}h2{font-size:15px;margin:0 0 10px}label{display:block;font-weight:600;margin:8px 0 5px}input,select,button{width:100%;padding:8px;border:1px solid #bfcdc4;border-radius:5px}button{background:#265b43;color:white;border:0;cursor:pointer;margin-top:10px}button:disabled{opacity:.5}.note{background:#fff4d6;padding:10px;border-radius:7px;line-height:1.5}#map{height:64vh;min-height:430px}#results{height:calc(36vh - 88px);overflow:auto;padding:10px;background:white}table{border-collapse:collapse;font-size:12px}td,th{border:1px solid #ddd;padding:6px;white-space:nowrap}tr:hover{background:#ecf3ee;cursor:pointer}#status{white-space:pre-wrap;line-height:1.5}small{color:#61756a}@media(max-width:850px){main{display:block}aside{max-height:none}#map{height:55vh}#results{height:300px}}</style></head><body><header><a href="../">← HERRAMIENTAS</a><h1>Geocodificador Territorial de Santiago</h1><div>SECPLAN · Subdirección de Planificación y Sustentabilidad · Oficina de Planificación Estratégica</div></header><main><aside><section><h2>1 · Direcciones</h2><input id="input" type="file" accept=".xlsx,.xls,.csv"><small>Una columna DIRECCION, o CALLE y NUMERO. Campo opcional COORD_GOOGLE solo para registros no localizados (latitud, longitud).</small></section><section><h2>2 · Bases cartográficas preestablecidas</h2><p id="base-status">Comprobando callejero y coberturas territoriales…</p><button id="check-bases" type="button">Verificar bases cartográficas</button><pre id="base-report" style="white-space:pre-wrap;font:12px/1.5 monospace;max-height:220px;overflow:auto" aria-live="polite"></pre><small>Fuente principal: Maestro de Calles IDE Chile 2022, adaptado del índice de Azimut (solo comuna de Santiago). Límite comunal y 27 barrios reutilizados del Visor Territorial; seis territorios del visor turístico municipal. Se cargan automáticamente.</small></section><section><h2>3 · Procesar y descargar</h2><button id="run">Geocodificar</button><button id="csv" disabled>Descargar CSV de auditoría</button><button id="geojson" disabled>Descargar GeoJSON</button><p><small>Para convertir GeoJSON a GeoPackage en QGIS: clic derecho en capa → Exportar → Guardar objetos como → GeoPackage. La exportación GPKG directa requiere el backend GIS.</small></p><div id="status">Carga los archivos para comenzar.</div></section></aside><article><div id="map"></div><div id="results"><p>Los resultados aparecerán aquí.</p></div></article></main><script>
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Geocodificador | Santiago</title><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script><style>*{box-sizing:border-box}body{margin:0;font:14px Arial,sans-serif;color:#20362a;background:#eaf1ed}header{padding:15px 22px;background:#192d27;color:white}header a{color:#b9e7d2}h1{font-size:22px;margin:7px 0}main{display:grid;grid-template-columns:360px 1fr}aside{padding:15px;overflow:auto;max-height:calc(100vh - 88px)}section{padding:13px;background:white;border:1px solid #d4e1d9;border-radius:10px;margin-bottom:12px}h2{font-size:15px;margin:0 0 10px}label{display:block;font-weight:600;margin:8px 0 5px}input,select,button{width:100%;padding:8px;border:1px solid #bfcdc4;border-radius:5px}button{background:#265b43;color:white;border:0;cursor:pointer;margin-top:10px}button:disabled{opacity:.5}.note{background:#fff4d6;padding:10px;border-radius:7px;line-height:1.5}#map{height:64vh;min-height:430px}#results{height:calc(36vh - 88px);overflow:auto;padding:10px;background:white}table{border-collapse:collapse;font-size:12px}td,th{border:1px solid #ddd;padding:6px;white-space:nowrap}tr:hover{background:#ecf3ee;cursor:pointer}#status{white-space:pre-wrap;line-height:1.5}small{color:#61756a}@media(max-width:850px){main{display:block}aside{max-height:none}#map{height:55vh}#results{height:300px}}</style></head><body><header><a href="../">← HERRAMIENTAS</a><h1>Geocodificador Territorial de Santiago</h1><div>SECPLAN · Subdirección de Planificación y Sustentabilidad · Oficina de Planificación Estratégica</div></header><main><aside><section><h2>1 · Direcciones</h2><input id="input" type="file" accept=".xlsx,.xls,.csv"><small>Una columna DIRECCION, CALLE y NUMERO, o una descripción que contiene una dirección (por ejemplo denominacion_acto).</small><label for="source-field">Columna con dirección o texto descriptivo</label><select id="source-field" disabled><option value="">Carga el archivo para ver las columnas</option></select><small>Se detectará una columna sugerida. Puedes elegir otra.</small><p id="source-preview" style="font-size:12px;line-height:1.4"></p></section><section><h2>2 · Bases cartográficas preestablecidas</h2><p id="base-status">Comprobando callejero y coberturas territoriales…</p><button id="check-bases" type="button">Verificar bases cartográficas</button><pre id="base-report" style="white-space:pre-wrap;font:12px/1.5 monospace;max-height:220px;overflow:auto" aria-live="polite"></pre><small>Fuente principal: Maestro de Calles IDE Chile 2022, adaptado del índice de Azimut (solo comuna de Santiago). Límite comunal y 27 barrios reutilizados del Visor Territorial; seis territorios del visor turístico municipal. Se cargan automáticamente.</small></section><section><h2>3 · Procesar y descargar</h2><button id="run">Geocodificar</button><button id="csv" disabled>Descargar CSV de auditoría</button><button id="geojson" disabled>Descargar GeoJSON</button><p><small>Para convertir GeoJSON a GeoPackage en QGIS: clic derecho en capa → Exportar → Guardar objetos como → GeoPackage. La exportación GPKG directa requiere el backend GIS.</small></p><div id="status">Carga los archivos para comenzar.</div></section></aside><article><div id="map"></div><div id="results"><p>Los resultados aparecerán aquí.</p></div></article></main><script>
 const $=s=>document.getElementById(s),map=L.map('map').setView([-33.4489,-70.6693],13);const callesBase=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19});const sateliteBase=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'Imagery © Esri, Maxar, Earthstar Geographics y proveedores',maxZoom:19});sateliteBase.addTo(map);L.control.layers({'Imagen satelital':sateliteBase,'Calles · OpenStreetMap':callesBase},null,{collapsed:false,position:'topright'}).addTo(map);const layer=L.featureGroup().addTo(map);let records=[],output=[];
 function normalize(v){return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\b(AVENIDA|AVDA|AV)\b/g,'AV').replace(/[.,#]/g,' ').replace(/\s+/g,' ').trim()}
 function prop(p,keys){for(const k of keys){const found=Object.keys(p||{}).find(x=>normalize(x)===normalize(k));if(found!=null&&p[found]!=null&&p[found]!=='')return p[found]}return ''}
 function fileData(input){return new Promise((resolve,reject)=>{let f=$(input).files[0];if(!f)return resolve(null);let r=new FileReader();r.onerror=()=>reject(Error('No se pudo leer '+input));r.onload=()=>{try{resolve(JSON.parse(r.result))}catch(e){reject(Error('GeoJSON inválido: '+input))}};r.readAsText(f)})}
 function sheetData(){return new Promise((resolve,reject)=>{const f=$('input').files[0];if(!f)return resolve([]);const rd=new FileReader();rd.onerror=()=>reject(Error('No se pudo leer el archivo'));rd.onload=()=>{try{let wb=XLSX.read(rd.result,{type:'array'});resolve(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}))}catch(e){reject(e)}};rd.readAsArrayBuffer(f)})}
+
+let cachedRows=null;
+function populateColumns(rows){
+ const keys=[...new Set(rows.slice(0,30).flatMap(r=>Object.keys(r)))],sel=$('source-field');
+ sel.innerHTML='<option value="">Automático (DIRECCION / CALLE + NUMERO)</option>';
+ for(const key of keys){const option=document.createElement('option');option.value=key;option.textContent=key;sel.appendChild(option)}
+ const suggested=keys.find(k=>/^(DIRECCION|DOMICILIO)$/i.test(normalize(k)))||keys.find(k=>/(DENOMINACION|DESCRIPCION|GLOSA|DETALLE|OBJETO)/i.test(normalize(k)));
+ sel.value=suggested||'';sel.disabled=false;previewColumn();
+}
+function previewColumn(){
+ const field=$('source-field').value,rows=cachedRows||[];
+ const example=rows.find(r=>String(field?r[field]:prop(r,['DIRECCION','DOMICILIO'])).trim());
+ $('source-preview').textContent='Filas: '+rows.length+'. Campo: '+(field||'Automático')+'. Ejemplo: '+String(example?(field?example[field]:prop(example,['DIRECCION','DOMICILIO'])):'').slice(0,180);
+}
+$('input').addEventListener('change',async()=>{try{cachedRows=await sheetData();populateColumns(cachedRows);$('status').textContent='Archivo leído: '+cachedRows.length+' filas. Selecciona la columna y pulsa Geocodificar.'}catch(e){cachedRows=null;$('status').textContent='Error al leer Excel o CSV: '+e.message}});
+$('source-field').addEventListener('change',previewColumn);
+function streetAliases(index){
+ const result=new Map();
+ for(const key of index.keys()){
+  const name=normalize(key),short=name.replace(/^(AV|AVENIDA|CALLE|PASAJE|PJE)\s+/,'');
+  for(const a of [name,short])if(a.length>=5&&!result.has(a))result.set(a,name);
+ }
+ return [...result.entries()].sort((a,b)=>b[0].length-a[0].length);
+}
+function extractAddresses(text,aliases){
+ const normalized=normalize(String(text||'').replace(/[“”"'’]/g,' '));
+ const results=[];
+ for(const [alias,street] of aliases){
+  let at=-1;
+  while((at=normalized.indexOf(alias,at+1))>=0){
+   const preceding=normalized[at-1]||' ',following=normalized[at+alias.length]||' ';
+   if(/[A-Z0-9]/.test(preceding)||/[A-Z0-9]/.test(following))continue;
+   const tail=normalized.slice(at+alias.length,at+alias.length+42);
+   const found=tail.match(/^\s*(?:,|N\s*[°ºO.]?\s*|NUMERO\s*[:°º#]?\s*|#\s*)*(\d{1,5}(?:\s*[-/]\s*\d{1,5})*)\b/);
+   if(found)results.push({at,end:at+alias.length,street,numbers:found[1].split(/\s*[-/]\s*/),text:alias+' '+found[1]});
+  }
+ }
+ results.sort((a,b)=>a.at-b.at||b.end-a.end);
+ const kept=[];
+ for(const result of results)if(!kept.some(x=>result.at>=x.at&&result.end<=x.end))kept.push(result);
+ return [...new Map(kept.map(x=>[x.street+'|'+x.numbers.join(','),x])).values()];
+}
 function features(o){return !o?[]:(o.type==='FeatureCollection'?o.features:o.type==='Feature'?[o]:[{type:'Feature',geometry:o,properties:{}}])}
 function inside(pt,polys){return polys.some(f=>{try{return turf.booleanPointInPolygon(pt,f)}catch(e){return false}})}
 function areaName(pt,fs){const f=fs.find(x=>{try{return turf.booleanPointInPolygon(pt,x)}catch(e){return false}});return f?String(prop(f.properties,['BARRIO','NOMBRE','NOM_BARRIO','TERRITORIO','NOM_TERRITORIO'])||'SIN NOMBRE'):''}
@@ -57,22 +99,29 @@ $('check-bases').onclick=verifyBases;
 
 $('run').onclick=async()=>{
  try{
-  const [rows,base]=await Promise.all([sheetData(),baseData()]);
+  const [rows,base]=await Promise.all([cachedRows?Promise.resolve(cachedRows):sheetData(),baseData()]);
   if(!rows.length)throw Error('Carga un Excel o CSV con direcciones.');
   const limits=base.limits,b=base.barrios,t=base.territorios,segments=base.segments;
   if(!segments.length)throw Error('No se pudo recuperar el callejero numerado de Azimut. No se generarán coordenadas arbitrarias.');
   layer.clearLayers();output=[];let found=0,manual=0,unfound=0;
   const index=new Map();
   for(const segment of segments){const k=normalize(segment.v);if(!index.has(k))index.set(k,[]);index.get(k).push(segment)}
+  const aliases=streetAliases(index),selectedField=$('source-field').value;
   for(let i=0;i<rows.length;i++){
-   const row=rows[i],full=String(prop(row,['DIRECCION','DIRECCIÓN','DOMICILIO'])||'').trim();
-   let calle=prop(row,['CALLE','VIA','NOMBRE_CALLE']),num=prop(row,['NUMERO','NÚMERO','NRO','NUM']);
-   if(!calle&&full){const m=full.match(/^(.*?)\s*,?\s+(\d+[A-Z]?)\b/i);if(m){calle=m[1];num=m[2]}}
+   const row=rows[i],sourceField=selectedField||'AUTOMATICO',full=String(selectedField?row[selectedField]:prop(row,['DIRECCION','DIRECCIÓN','DOMICILIO'])||'').trim();
+   let calle=selectedField?'':prop(row,['CALLE','VIA','NOMBRE_CALLE']),num=selectedField?'':prop(row,['NUMERO','NÚMERO','NRO','NUM']);
+   const extracted=full?extractAddresses(full,aliases):[];
+   let extractStatus='SIN DIRECCION',extractedText=extracted.map(x=>x.text).join(' | ');
+   if(extracted.length===1&&extracted[0].numbers.length===1){calle=extracted[0].street;num=extracted[0].numbers[0];extractStatus='UNICA'}
+   else if(extracted.length>1||extracted.some(x=>x.numbers.length>1)){extractStatus='MULTIPLE - REVISAR'}
+   else if(!selectedField&&!calle&&full){const m=full.match(/^(.+?)\s*,?\s+(?:N[°ºo.]?\s*)?(\d{1,5})\s*$/i);if(m){calle=m[1];num=m[2];extractStatus='UNICA';extractedText=full}}
+   if(!full&&calle&&num){extractStatus='COLUMNAS SEPARADAS';extractedText=String(calle)+' '+String(num)}
+   const ambiguous=extractStatus==='MULTIPLE - REVISAR';
    const name=normalize(calle),n=parseInt(String(num),10);
    let coord=null,method='NO LOCALIZADA',reason='Sin calle o numeración válida para Santiago',source='',confidence=0;
    const keys=[name,name.replace(/^(CALLE|AV|AVENIDA|PASAJE|PJE)\s+/,'')];
    let candidates=[];
-   if(name&&Number.isFinite(n)){
+   if(!ambiguous&&name&&Number.isFinite(n)){
     const byName=[];
     for(const [street,segs] of index){if(street===name||normalize(street.replace(/^(CALLE|AVENIDA|PASAJE)\s+/,''))===keys[1])byName.push(...segs)}
     for(const seg of byName){
@@ -86,20 +135,21 @@ $('run').onclick=async()=>{
    }
    if(candidates.length===1){coord=candidates[0].xy;method='INTERPOLADA';source='AZIMUT_IDE_2022';confidence=limits.length?75:60;reason=limits.length?'Interpolada y validada dentro del límite oficial':'Interpolada sobre segmento asignado a comuna Santiago; límite oficial no cargado';found++}
    else if(candidates.length>1){reason='Más de un tramo numerado coincide. Requiere validación para evitar coordenada errónea';unfound++}
-   else{
+   else if(!ambiguous){
     const g=coordGoogle(prop(row,['COORD_GOOGLE','COORDENADA_GOOGLE','COORDENADAS_GOOGLE']));
     if(g&&limits.length&&inside(turf.point(g),limits)){coord=g;method='MANUAL GOOGLE';source='COORD_GOOGLE';reason='Usada solo por no localización automática; verificada dentro del límite comunal';manual++}
     else{reason=g&&!limits.length?'COORD_GOOGLE pendiente: falta capa oficial para validar comuna':g?'COORD_GOOGLE fuera del límite comunal':'Sin tramo numerado compatible en Santiago';unfound++}
    }
+   if(ambiguous){reason='Texto con varias direcciones o numeraciones: revisar';unfound++}
    const pt=coord?turf.point(coord):null;
-   const res={...row,DIRECCION_ORIGINAL:full||[calle,num].filter(Boolean).join(' '),CALLE_NORMALIZADA:name,NUMERO_NORMALIZADO:Number.isFinite(n)?n:'',TIPO_GEO:method,DESC_GEO:reason,FUENTE_GEO:source,CONFIANZA:confidence,LONGITUD_GENERADA:source==='AZIMUT_IDE_2022'?coord[0]:'',LATITUD_GENERADA:source==='AZIMUT_IDE_2022'?coord[1]:'',LONGITUD_FINAL:coord?coord[0]:'',LATITUD_FINAL:coord?coord[1]:'',BARRIO:pt?areaName(pt,b):'',TERRITORIO:pt?areaName(pt,t):'',ESTADO:coord?'GEORREFERENCIADA':'PENDIENTE'};
+   const res={...row,CAMPO_ORIGEN:sourceField,TEXTO_ORIGINAL:full,DIRECCION_EXTRAIDA:extractedText,ESTADO_EXTRACCION:extractStatus,NUM_DIRECCIONES:extracted.reduce((n,x)=>n+x.numbers.length,0),DIRECCION_ORIGINAL:full||[calle,num].filter(Boolean).join(' '),CALLE_NORMALIZADA:name,NUMERO_NORMALIZADO:Number.isFinite(n)?n:'',TIPO_GEO:method,DESC_GEO:reason,FUENTE_GEO:source,CONFIANZA:confidence,LONGITUD_GENERADA:source==='AZIMUT_IDE_2022'?coord[0]:'',LATITUD_GENERADA:source==='AZIMUT_IDE_2022'?coord[1]:'',LONGITUD_FINAL:coord?coord[0]:'',LATITUD_FINAL:coord?coord[1]:'',BARRIO:pt?areaName(pt,b):'',TERRITORIO:pt?areaName(pt,t):'',ESTADO:coord?'GEORREFERENCIADA':'PENDIENTE'};
    output.push(res);
    if(coord){const marker=L.circleMarker([coord[1],coord[0]],{radius:6,color:method==='MANUAL GOOGLE'?'#b56b00':'#245caa',weight:2,fillOpacity:.75});marker.bindPopup('<b>'+String(res.DIRECCION_ORIGINAL).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</b><br>'+method+'<br>'+reason).addTo(layer)}
   }
   if(layer.getLayers().length)map.fitBounds(layer.getBounds().pad(.1));
   $('status').textContent='Registros: '+output.length+'\nInterpolados: '+found+'\nCOORD_GOOGLE usadas: '+manual+'\nPendientes: '+unfound+'\nLímite municipal: '+(limits.length?'cargado':'pendiente')+'\nBarrios: '+(b.length?'cargados':'pendientes')+' · Territorios: '+(t.length?'cargados':'pendientes');
   $('csv').disabled=output.length===0;$('geojson').disabled=!output.some(r=>r.LATITUD_FINAL!=='');
-  const cols=['DIRECCION_ORIGINAL','TIPO_GEO','DESC_GEO','BARRIO','TERRITORIO','LATITUD_FINAL','LONGITUD_FINAL'];
+  const cols=['DIRECCION_EXTRAIDA','ESTADO_EXTRACCION','CAMPO_ORIGEN','TIPO_GEO','DESC_GEO','BARRIO','TERRITORIO','LATITUD_FINAL','LONGITUD_FINAL'];
   $('results').innerHTML='<table><thead><tr>'+cols.map(k=>'<th>'+k+'</th>').join('')+'</tr></thead><tbody>'+output.map((r,i)=>'<tr data-i="'+i+'">'+cols.map(k=>'<td>'+String(r[k]??'').replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
   $('results').querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>{const r=output[Number(tr.dataset.i)];if(r.LATITUD_FINAL!=='')map.setView([r.LATITUD_FINAL,r.LONGITUD_FINAL],18)});
  }catch(e){$('status').textContent='Error: '+e.message;console.error(e)}

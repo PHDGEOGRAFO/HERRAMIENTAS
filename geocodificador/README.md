@@ -7,11 +7,11 @@ Importar un CSV o XLSX con `DIRECCION` o `CALLE` y `NUMERO`. Solo si la búsqued
 
 ## Bases
 - **Callejero con numeración:** Azimut / Maestro de Calles IDE Chile 2022, a través de `callejero-segments-index.json`. Se usa exclusivamente la clave de comuna `santiago`, con registros `c, v, n, g`. Requiere conectividad y acceso CORS a la fuente. No es todavía una copia alojada en HERRAMIENTAS.
-- **Límite oficial:** ubicación prevista `datos/limite_comunal.geojson`. Aún no publicado.
-- **Barrios oficiales:** ubicación prevista `datos/barrios.geojson`. Aún no publicado.
-- **Territorios oficiales:** ubicación prevista `datos/territorios.geojson`. Aún no publicado.
+- **Límite comunal:** `datos/limite_comunal.geojson` (1 polígono), copia de `PHDGEOGRAFO/VISOR-REPOSITORIO-DIGITAL/public/data/comuna.geojson`.
+- **Barrios municipales:** `datos/barrios.geojson` (27 polígonos), copia de `PHDGEOGRAFO/VISOR-REPOSITORIO-DIGITAL/public/data/barrios.geojson`.
+- **Territorios municipales:** `datos/territorios.geojson` (6 polígonos), reutilizados de la versión municipal del visor turístico Santiago de octubre de 2026. Revisar contra base territorial maestra ante posteriores modificaciones.
 
-El navegador carga automáticamente cualquier GeoJSON publicado en estas rutas. Sin límite comunal oficial, las coordenadas interpoladas están respaldadas por la comuna que declara la base IDE, pero **no** tienen validación de intersección espacial; en ese caso `COORD_GOOGLE` no se acepta. Sin barrios o territorios oficiales, sus respectivos atributos se dejan vacíos.
+El navegador carga automáticamente estas tres capas sin intervención del usuario, identifica barrio y territorio mediante intersección y valida los puntos dentro del límite comunal. Los límites deben revisarse frente a su fuente maestra en cada actualización territorial.
 
 ## Calidad
 Los resultados son **INTERPOLADA** (nunca exactos por el solo hecho de estar dentro del rango), **MANUAL GOOGLE** o **NO LOCALIZADA**. Dos o más tramos compatibles generan revisión en vez de elegir un punto arbitrario.

@@ -98,11 +98,11 @@ $('run').onclick=async()=>{
   }
   if(layer.getLayers().length)map.fitBounds(layer.getBounds().pad(.1));
   $('status').textContent='Registros: '+output.length+'\nInterpolados: '+found+'\nCOORD_GOOGLE usadas: '+manual+'\nPendientes: '+unfound+'\nLímite municipal: '+(limits.length?'cargado':'pendiente')+'\nBarrios: '+(b.length?'cargados':'pendientes')+' · Territorios: '+(t.length?'cargados':'pendientes');
-  $('csv').disabled=false;$('geojson').disabled=false;
+  $('csv').disabled=output.length===0;$('geojson').disabled=!output.some(r=>r.LATITUD_FINAL!=='');
   const cols=['DIRECCION_ORIGINAL','TIPO_GEO','DESC_GEO','BARRIO','TERRITORIO','LATITUD_FINAL','LONGITUD_FINAL'];
   $('results').innerHTML='<table><thead><tr>'+cols.map(k=>'<th>'+k+'</th>').join('')+'</tr></thead><tbody>'+output.map((r,i)=>'<tr data-i="'+i+'">'+cols.map(k=>'<td>'+String(r[k]??'').replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
   $('results').querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>{const r=output[Number(tr.dataset.i)];if(r.LATITUD_FINAL!=='')map.setView([r.LATITUD_FINAL,r.LONGITUD_FINAL],18)});
  }catch(e){$('status').textContent='Error: '+e.message;console.error(e)}
 };
-$('csv').onclick=()=>download(csvText(output),'geocodificador_santiago_auditoria.csv','text/csv;charset=utf-8');$('geojson').onclick=()=>download(JSON.stringify({type:'FeatureCollection',features:output.filter(r=>r.LATITUD_FINAL!=='').map(r=>({type:'Feature',geometry:{type:'Point',coordinates:[r.LONGITUD_FINAL,r.LATITUD_FINAL]},properties:r}))}),null,2),'geocodificador_santiago.geojson','application/geo+json');
+$('csv').onclick=()=>download(csvText(output),'geocodificador_santiago_auditoria.csv','text/csv;charset=utf-8');$('geojson').onclick=()=>download(JSON.stringify({type:'FeatureCollection',features:output.filter(r=>r.LATITUD_FINAL!=='').map(r=>({type:'Feature',geometry:{type:'Point',coordinates:[r.LONGITUD_FINAL,r.LATITUD_FINAL]},properties:r}))},null,2),'geocodificador_santiago.geojson','application/geo+json');
 </script></body></html>

@@ -89,6 +89,56 @@ function download(text,filename,type){let a=document.createElement('a');a.href=U
 function csvText(rows){let keys=Object.keys(rows[0]||{}),escape=v=>'"'+String(v??'').replace(/"/g,'""')+'"';return '\ufeff'+[keys.map(escape).join(';'),...rows.map(x=>keys.map(k=>escape(x[k])).join(';'))].join('\r\n')}
 
 const DATA_BASE='./datos/';
+const domLayer=L.geoJSON(null,{style:{color:'#d97706',weight:2,opacity:.78}});
+const domControl=L.control({position:'topright'});
+domControl.onAdd=()=>{const d=L.DomUtil.create('div','leaflet-bar');d.style.cssText='background:#fff;padding:7px;border-radius:5px;font:12px Arial;box-shadow:0 1px 5px #7778';const label=document.createElement('label');const check=document.createElement('input');check.type='checkbox';check.style.marginRight='5px';check.onchange=()=>check.checked?domLayer.addTo(map):map.removeLayer(domLayer);label.append(check,document.createTextNode('Mostrar ejes DOM'));d.append(label);L.DomEvent.disableClickPropagation(d);return d};
+domControl.addTo(map);
+const domResultStyle=document.createElement('style');domResultStyle.textContent='.dom-check-ok{color:#14642a;font-weight:700}.dom-check-warn{color:#a44c05;font-weight:700}';document.head.appendChild(domResultStyle);
+let domPromise=null;
+async function domData(){
+ if(domPromise)return domPromise;
+ domPromise=(async()=>{
+  if(!window.GIS_STGO_DOM_EJES_B64){
+   await new Promise((resolve,reject)=>{
+    const sc=document.createElement('script');sc.src=DATA_BASE+'dom-ejes-data.js';sc.onload=resolve;sc.onerror=()=>reject(Error('Base DOM EJE no disponible'));document.head.appendChild(sc);
+   });
+  }
+  if(typeof DecompressionStream!=='function')throw Error('El navegador no soporta descompresión de datos DOM; use Chrome/Edge actualizados');
+  const zipped=Uint8Array.from(atob(window.GIS_STGO_DOM_EJES_B64),c=>c.charCodeAt(0));
+  const decoded=new Blob([zipped]).stream().pipeThrough(new DecompressionStream('gzip'));
+  const rows=JSON.parse(await new Response(decoded).text());
+  if(!Array.isArray(rows)||rows.length!==4479)throw Error('DOM EJE: cobertura incompleta');
+  const index=new Map();
+  for(const r of rows){
+   const key=domName(r[1]);if(!key)continue;
+   if(!index.has(key))index.set(key,[]);
+   index.get(key).push(r);
+  }
+  domLayer.addData({type:'FeatureCollection',features:rows.filter(r=>r[6].length>1).map(r=>({type:'Feature',properties:{EJES_ID:r[0],NOM_ACTUAL:r[1],PARFROM:r[2],PARTO:r[3],IMPFROM:r[4],IMPTO:r[5]},geometry:{type:'LineString',coordinates:r[6]}}))});
+  domLayer.bindPopup(l=>{const p=l.feature.properties;return '<b>'+String(p.NOM_ACTUAL).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</b><br>EJE DOM ID: '+p.EJES_ID+'<br>Pares: '+p.PARFROM+'–'+p.PARTO+'<br>Impares: '+p.IMPFROM+'–'+p.IMPTO});
+  return {rows,index};
+ })();
+ return domPromise;
+}
+function domName(v){return normalize(v).replace(/^(CALLE|AV|PASAJE|PJE|PASEO|CAMINO|PTE)\s+/,'')}
+function validarDom(nombre,numero,coord,dom){
+ if(!dom)return {estado:'DOM_NO_DISPONIBLE',id:'',via:'',rango:'',dist:''};
+ if(!nombre||!Number.isFinite(numero))return {estado:'DOM_SIN_DIRECCION',id:'',via:'',rango:'',dist:''};
+ const vias=dom.index.get(domName(nombre))||[];
+ if(!vias.length)return {estado:'CALLE_NO_REGISTRADA_DOM',id:'',via:'',rango:'',dist:''};
+ const impar=numero%2!==0,coinciden=vias.filter(r=>{
+  const a=impar?r[4]:r[2],b=impar?r[5]:r[3];
+  return a>0&&b>0&&numero>=Math.min(a,b)&&numero<=Math.max(a,b);
+ });
+ if(!coinciden.length)return {estado:'NUMERO_FUERA_RANGO_DOM',id:'',via:vias[0][1],rango:'',dist:''};
+ const withDistances=coinciden.map(r=>{
+  let dist=null;
+  try{if(coord&&r[6].length>=2)dist=Math.round(turf.pointToLineDistance(turf.point(coord),turf.lineString(r[6]),{units:'meters'}))}catch(_){}
+  return {r,dist};
+ }).sort((a,b)=>(a.dist??Infinity)-(b.dist??Infinity));
+ const best=withDistances[0],r=best.r,a=impar?r[4]:r[2],b=impar?r[5]:r[3];
+ return {estado:withDistances.length>1?'MULTIPLES_TRAMOS_DOM':best.dist!=null&&best.dist>120?'DISTANTE_DEL_EJE_DOM':'COINCIDE_DOM',id:r[0],via:r[1],rango:a+'-'+b,dist:best.dist??'',tramos:withDistances.length};
+}
 const azimutSources=['https://julloa.space/azimut/callejero-segments-index.json','https://raw.githubusercontent.com/geoidegeoidal/azimut/main/public/callejero-segments-index.json'];
 let basePromise=null;
 async function getJson(url){const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),12000);try{const response=await fetch(url,{cache:'force-cache',signal:controller.signal});if(!response.ok)throw Error('HTTP '+response.status);return await response.json()}finally{clearTimeout(timeout)}}
@@ -96,14 +146,15 @@ async function firstAvailable(urls){for(const url of urls){try{return await getJ
 async function baseData(){
  if(basePromise)return basePromise;
  basePromise=(async()=>{
-   const [roadData,limite,barrios,territorios]=await Promise.all([
+   const [roadData,limite,barrios,territorios,dom]=await Promise.all([
      firstAvailable(azimutSources),
      firstAvailable([DATA_BASE+'limite_comunal.geojson']),
      firstAvailable([DATA_BASE+'barrios.geojson']),
-     firstAvailable([DATA_BASE+'territorios.geojson'])
+     firstAvailable([DATA_BASE+'territorios.geojson']),
+     domData().catch(e=>{console.warn('DOM EJE:',e);return null})
    ]);
    const segments=Array.isArray(roadData)?roadData.filter(x=>normalize(x.c)==='SANTIAGO'):(roadData?.santiago||[]);
-   const b={segments,limits:features(limite),barrios:features(barrios),territorios:features(territorios)};
+   const b={segments,limits:features(limite),barrios:features(barrios),territorios:features(territorios),dom};
    barriosLayer.clearLayers();territoriosLayer.clearLayers();limiteLayer.clearLayers();
    if(b.barrios.length)barriosLayer.addData({type:'FeatureCollection',features:b.barrios});
    if(b.territorios.length)territoriosLayer.addData({type:'FeatureCollection',features:b.territorios});
@@ -112,7 +163,7 @@ async function baseData(){
    if(b.territorios.length&&!map.hasLayer(territoriosLayer))territoriosLayer.addTo(map);
    if(b.limits.length&&!map.hasLayer(limiteLayer))limiteLayer.addTo(map);
    layer.bringToFront();
-   $('base-status').textContent='Ejes numerados Santiago: '+segments.length+' · Límite oficial: '+(b.limits.length?'cargado':'pendiente')+' · Barrios: '+(b.barrios.length?'cargados':'pendientes')+' · Territorios: '+(b.territorios.length?'cargados':'pendientes')+'.';
+   $('base-status').textContent='Ejes numerados Santiago: '+segments.length+' · Límite oficial: '+(b.limits.length?'cargado':'pendiente')+' · Barrios: '+(b.barrios.length?'cargados':'pendientes')+' · Territorios: '+(b.territorios.length?'cargados':'pendientes')+' · DOM EJE: '+(dom?.rows.length||0)+' segmentos.';
    return b;
  })();
  return basePromise;
@@ -125,14 +176,15 @@ async function verifyBases(){
  ['Barrios',DATA_BASE+'barrios.geojson','polygon'],
  ['Territorios',DATA_BASE+'territorios.geojson','polygon'],
  ['Azimut · eje numerado',azimutSources[0],'azimut'],
- ['Azimut · respaldo GitHub',azimutSources[1],'azimut']
+ ['Azimut · respaldo GitHub',azimutSources[1],'azimut'],
+ ['DOM EJE · Fuente municipal',DATA_BASE+'dom-ejes-data.js','dom']
  ];
  const lines=await Promise.all(checks.map(async ([name,url,type])=>{
   try{
-   const x=await getJson(url);
-   const all=type==='polygon'?features(x):(Array.isArray(x)?x:(x?.santiago||[]));
+   const x=type==='dom'?await domData():await getJson(url);
+   const all=type==='dom'?x.rows:type==='polygon'?features(x):(Array.isArray(x)?x:(x?.santiago||[]));
    if(!all.length)throw Error('sin elementos');
-   const good=type==='polygon'?all.every(f=>f.geometry&&['Polygon','MultiPolygon'].includes(f.geometry.type)):all.some(f=>normalize(f.c)==='SANTIAGO'&&Array.isArray(f.n)&&Array.isArray(f.g));
+   const good=type==='dom'?all.length===4479:type==='polygon'?all.every(f=>f.geometry&&['Polygon','MultiPolygon'].includes(f.geometry.type)):all.some(f=>normalize(f.c)==='SANTIAGO'&&Array.isArray(f.n)&&Array.isArray(f.g));
    return (good?'✓ ':'⚠ ')+name+': '+all.length+' elementos · '+(good?'formato válido':'revisar contenido');
   }catch(e){return '✗ '+name+': '+String(e.message||e)}
  }));
@@ -144,7 +196,7 @@ $('run').onclick=async()=>{
  try{
   const [rows,base]=await Promise.all([cachedRows?Promise.resolve(cachedRows):sheetData(),baseData()]);
   if(!rows.length)throw Error('Carga un Excel o CSV con direcciones.');
-  const limits=base.limits,b=base.barrios,t=base.territorios,segments=base.segments;
+  const limits=base.limits,b=base.barrios,t=base.territorios,segments=base.segments,dom=base.dom;
   if(!segments.length)throw Error('No se pudo recuperar el callejero numerado de Azimut. No se generarán coordenadas arbitrarias.');
   layer.clearLayers();output=[];let found=0,manual=0,unfound=0;
   const index=new Map();
@@ -187,14 +239,15 @@ $('run').onclick=async()=>{
    }
    if(ambiguous){reason='Texto con varias direcciones o numeraciones: revisar';unfound++}
    const pt=coord?turf.point(coord):null;
-   const res={...row,CAMPO_ORIGEN:sourceField,TEXTO_ORIGINAL:full,DIRECCION_EXTRAIDA:extractedText,ESTADO_EXTRACCION:extractStatus,NUM_DIRECCIONES:extracted.reduce((n,x)=>n+x.numbers.length,0),DIRECCION_ORIGINAL:full||[calle,num].filter(Boolean).join(' '),CALLE_NORMALIZADA:name,NUMERO_NORMALIZADO:Number.isFinite(n)?n:'',TIPO_GEO:method,DESC_GEO:reason,FUENTE_GEO:source,CONFIANZA:confidence,LONGITUD_GENERADA:source==='AZIMUT_IDE_2022'?coord[0]:'',LATITUD_GENERADA:source==='AZIMUT_IDE_2022'?coord[1]:'',LONGITUD_FINAL:coord?coord[0]:'',LATITUD_FINAL:coord?coord[1]:'',BARRIO:pt?areaName(pt,b):'',TERRITORIO:pt?areaName(pt,t):'',ESTADO:coord?'GEORREFERENCIADA':'PENDIENTE'};
+   const domCheck=validarDom(name,n,coord,dom);
+   const res={...row,DOM_ESTADO:domCheck.estado,DOM_EJES_ID:domCheck.id,DOM_NOM_ACTUAL:domCheck.via,DOM_RANGO_NUM:domCheck.rango,DOM_DISTANCIA_M:domCheck.dist,DOM_TRAMOS:domCheck.tramos||0,CAMPO_ORIGEN:sourceField,TEXTO_ORIGINAL:full,DIRECCION_EXTRAIDA:extractedText,ESTADO_EXTRACCION:extractStatus,NUM_DIRECCIONES:extracted.reduce((n,x)=>n+x.numbers.length,0),DIRECCION_ORIGINAL:full||[calle,num].filter(Boolean).join(' '),CALLE_NORMALIZADA:name,NUMERO_NORMALIZADO:Number.isFinite(n)?n:'',TIPO_GEO:method,DESC_GEO:reason,FUENTE_GEO:source,CONFIANZA:confidence,LONGITUD_GENERADA:source==='AZIMUT_IDE_2022'?coord[0]:'',LATITUD_GENERADA:source==='AZIMUT_IDE_2022'?coord[1]:'',LONGITUD_FINAL:coord?coord[0]:'',LATITUD_FINAL:coord?coord[1]:'',BARRIO:pt?areaName(pt,b):'',TERRITORIO:pt?areaName(pt,t):'',ESTADO:coord?'GEORREFERENCIADA':'PENDIENTE'};
    output.push(res);
    if(coord){const marker=L.circleMarker([coord[1],coord[0]],{radius:6,color:method==='MANUAL GOOGLE'?'#b56b00':'#245caa',weight:2,fillOpacity:.75});marker.bindPopup('<b>'+String(res.DIRECCION_ORIGINAL).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</b><br>'+method+'<br>'+reason).addTo(layer)}
   }
   if(layer.getLayers().length)map.fitBounds(layer.getBounds().pad(.1));
-  $('status').textContent='Registros: '+output.length+'\nInterpolados: '+found+'\nCOORD_GOOGLE usadas: '+manual+'\nPendientes: '+unfound+'\nLímite municipal: '+(limits.length?'cargado':'pendiente')+'\nBarrios: '+(b.length?'cargados':'pendientes')+' · Territorios: '+(t.length?'cargados':'pendientes');
+  $('status').textContent='Registros: '+output.length+'\nInterpolados: '+found+'\nCOORD_GOOGLE usadas: '+manual+'\nPendientes: '+unfound+'\nLímite municipal: '+(limits.length?'cargado':'pendiente')+'\nBarrios: '+(b.length?'cargados':'pendientes')+' · Territorios: '+(t.length?'cargados':'pendientes')+'\nDOM EJE: '+(dom?.rows.length||0)+' segmentos validados';
   $('csv').disabled=output.length===0;for(const id of ['geojson','shp','gpkg'])$(id).disabled=!output.some(r=>r.LATITUD_FINAL!=='');
-  const cols=['DIRECCION_EXTRAIDA','ESTADO_EXTRACCION','CAMPO_ORIGEN','TIPO_GEO','DESC_GEO','BARRIO','TERRITORIO','LATITUD_FINAL','LONGITUD_FINAL'];
+  const cols=['DIRECCION_EXTRAIDA','ESTADO_EXTRACCION','CAMPO_ORIGEN','TIPO_GEO','DOM_ESTADO','DOM_NOM_ACTUAL','DOM_EJES_ID','DOM_DISTANCIA_M','DESC_GEO','BARRIO','TERRITORIO','LATITUD_FINAL','LONGITUD_FINAL'];
   $('results').innerHTML='<table><thead><tr>'+cols.map(k=>'<th>'+k+'</th>').join('')+'</tr></thead><tbody>'+output.map((r,i)=>'<tr data-i="'+i+'">'+cols.map(k=>'<td>'+String(r[k]??'').replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
   $('results').querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>{const r=output[Number(tr.dataset.i)];if(r.LATITUD_FINAL!=='')map.setView([r.LATITUD_FINAL,r.LONGITUD_FINAL],18)});
  }catch(e){$('status').textContent='Error: '+e.message;console.error(e)}
@@ -216,7 +269,7 @@ $('shp').onclick=async()=>{
    ...f,properties:{
     ID:output.indexOf(f.properties)+1,DIRECCION:String(f.properties.DIRECCION_EXTRAIDA||f.properties.DIRECCION_ORIGINAL||'').slice(0,250),
     METODO:f.properties.TIPO_GEO||'',BARRIO:f.properties.BARRIO||'',TERRITORIO:f.properties.TERRITORIO||'',
-    FUENTE:f.properties.FUENTE_GEO||'',CONFIANZA:f.properties.CONFIANZA||0,
+    FUENTE:f.properties.FUENTE_GEO||'',CONFIANZA:f.properties.CONFIANZA||0,DOM_ID:f.properties.DOM_EJES_ID||'',DOM_ESTADO:f.properties.DOM_ESTADO||'',
     LATITUD:f.geometry.coordinates[1],LONGITUD:f.geometry.coordinates[0]
    }
   }))};

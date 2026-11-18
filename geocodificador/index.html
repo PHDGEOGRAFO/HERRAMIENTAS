@@ -268,4 +268,4 @@ $('gpkg').onclick=async()=>{
  finally{button.disabled=false;button.textContent='Descargar GeoPackage (.gpkg)'}
 };
 $('csv').onclick=()=>download(csvText(output),'geocodificador_santiago_auditoria.csv','text/csv;charset=utf-8');$('geojson').onclick=()=>download(JSON.stringify({type:'FeatureCollection',features:output.filter(r=>r.LATITUD_FINAL!=='').map(r=>({type:'Feature',geometry:{type:'Point',coordinates:[r.LONGITUD_FINAL,r.LATITUD_FINAL]},properties:r}))},null,2),'geocodificador_santiago.geojson','application/geo+json');
-</script></body></html>
+</script><script defer src="https://phdgeografo.github.io/GIS-STGO/assets/layout-export.js?v=1.2"></script></body></html>
